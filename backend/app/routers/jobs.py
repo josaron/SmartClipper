@@ -1,19 +1,22 @@
 import os
 import asyncio
 import shutil
+import aiofiles
 from typing import Dict
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import FileResponse
 
 from app.models.job import (
-    Job, JobCreate, JobProgress, JobPreview, JobStatus,
+    Job, JobProgress, JobPreview, JobStatus,
     ScriptSegment, AVAILABLE_VOICES
 )
 from app.utils.parser import parse_script_input
-from app.services.downloader import YouTubeDownloader
 from app.services.tts import PiperTTS
 from app.services.video import VideoProcessor
 from app.config import TEMP_DIR, OUTPUT_DIR
+
+# Maximum file size: 100MB
+MAX_FILE_SIZE = 100 * 1024 * 1024
 
 router = APIRouter()
 
@@ -35,7 +38,6 @@ async def process_job(job_id: str):
         return
     
     try:
-        downloader = YouTubeDownloader(output_dir=TEMP_DIR)
         tts = PiperTTS(output_dir=TEMP_DIR)
         video_processor = VideoProcessor(temp_dir=TEMP_DIR)
         
@@ -44,10 +46,11 @@ async def process_job(job_id: str):
         os.makedirs(job_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Step 1: Download video (0-20%)
-        update_job_progress(job, JobStatus.DOWNLOADING, 5, "Downloading video...")
-        source_video = downloader.download(job.youtube_url, job_id)
-        update_job_progress(job, JobStatus.DOWNLOADING, 20, "Video downloaded")
+        # Step 1: Video already uploaded (0-20%)
+        source_video = job.source_video_path
+        if not os.path.exists(source_video):
+            raise Exception("Source video file not found")
+        update_job_progress(job, JobStatus.UPLOADING, 20, "Video ready for processing")
         
         # Step 2: Generate TTS audio for each segment (20-40%)
         update_job_progress(job, JobStatus.GENERATING_AUDIO, 25, "Generating voiceover...")
@@ -133,32 +136,75 @@ async def get_voices():
 
 
 @router.post("", response_model=dict)
-async def create_job(request: JobCreate, background_tasks: BackgroundTasks):
+async def create_job(
+    background_tasks: BackgroundTasks,
+    video: UploadFile = File(..., description="Source video file (MP4, max 100MB)"),
+    script_input: str = Form(..., description="Pipe-delimited script input"),
+    voice: str = Form(default="en_US-lessac-medium", description="Piper voice model name"),
+):
     """
-    Create a new video generation job.
+    Create a new video generation job with file upload.
     
     The job will be processed in the background. Use the returned job ID
     to poll for status updates.
     """
+    # Validate file type
+    if not video.content_type or not video.content_type.startswith("video/"):
+        raise HTTPException(status_code=400, detail="File must be a video (MP4, MOV, etc.)")
+    
     # Parse script input
-    segments = parse_script_input(request.script_input)
+    segments = parse_script_input(script_input)
     if not segments:
         raise HTTPException(status_code=400, detail="No valid script segments found")
     
     # Validate voice
     valid_voices = [v["id"] for v in AVAILABLE_VOICES]
-    if request.voice not in valid_voices:
+    if voice not in valid_voices:
         raise HTTPException(
             status_code=400, 
             detail=f"Invalid voice. Available: {valid_voices}"
         )
     
+    # Generate job ID first
+    import uuid
+    job_id = str(uuid.uuid4())
+    
+    # Create job directory and save uploaded file
+    job_dir = os.path.join(TEMP_DIR, job_id)
+    os.makedirs(job_dir, exist_ok=True)
+    
+    # Determine file extension from filename or default to .mp4
+    file_ext = os.path.splitext(video.filename or "video.mp4")[1] or ".mp4"
+    source_video_path = os.path.join(job_dir, f"source{file_ext}")
+    
+    # Save uploaded file with size limit check
+    try:
+        total_size = 0
+        async with aiofiles.open(source_video_path, "wb") as f:
+            while chunk := await video.read(1024 * 1024):  # Read 1MB at a time
+                total_size += len(chunk)
+                if total_size > MAX_FILE_SIZE:
+                    # Clean up and reject
+                    await f.close()
+                    shutil.rmtree(job_dir, ignore_errors=True)
+                    raise HTTPException(
+                        status_code=413, 
+                        detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB"
+                    )
+                await f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save video: {str(e)}")
+    
     # Create job
     job = Job(
-        youtube_url=request.youtube_url,
-        voice=request.voice,
+        id=job_id,
+        source_video_path=source_video_path,
+        voice=voice,
         segments=segments,
-        message="Job created, starting processing..."
+        message="Video uploaded, starting processing..."
     )
     
     jobs[job.id] = job

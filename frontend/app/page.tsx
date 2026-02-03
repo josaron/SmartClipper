@@ -1,23 +1,27 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScriptInput } from "@/components/ScriptInput";
 import { VoiceSelector } from "@/components/VoiceSelector";
 import { createJob, getVoices, type Voice } from "@/lib/api";
 import { parseScriptInput } from "@/lib/parser";
-import { Loader2, Video, Sparkles, Clock } from "lucide-react";
+import { Loader2, Video, Sparkles, Clock, Upload, FileVideo, X } from "lucide-react";
+
+const MAX_FILE_SIZE_MB = 100;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 export default function HomePage() {
   const router = useRouter();
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [scriptInput, setScriptInput] = useState("");
   const [voice, setVoice] = useState("en_US-lessac-medium");
   const [voices, setVoices] = useState<Voice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   // Validate script input in real-time
@@ -27,7 +31,66 @@ export default function HomePage() {
   }, [scriptInput]);
 
   const hasValidSegments = (parseResult?.segments.length ?? 0) > 0;
-  const canSubmit = youtubeUrl.trim() && hasValidSegments && !isLoading;
+  const canSubmit = videoFile && hasValidSegments && !isLoading;
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("video/")) {
+      setError("Please select a video file (MP4, MOV, etc.)");
+      return;
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB`);
+      return;
+    }
+
+    setError(null);
+    setVideoFile(file);
+  };
+
+  // Handle file drop
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("video/")) {
+      setError("Please select a video file (MP4, MOV, etc.)");
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large. Maximum size is ${MAX_FILE_SIZE_MB}MB`);
+      return;
+    }
+
+    setError(null);
+    setVideoFile(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const clearFile = () => {
+    setVideoFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   // Fetch available voices on mount
   useEffect(() => {
@@ -54,11 +117,12 @@ export default function HomePage() {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
+    setUploadProgress(0);
 
     try {
       // Validate inputs
-      if (!youtubeUrl.trim()) {
-        throw new Error("Please enter a YouTube URL");
+      if (!videoFile) {
+        throw new Error("Please select a video file");
       }
       if (!scriptInput.trim()) {
         throw new Error("Please enter the script with timestamps");
@@ -67,18 +131,22 @@ export default function HomePage() {
         throw new Error("No valid script segments found. Check the format.");
       }
 
-      // Create job
-      const response = await createJob({
-        youtube_url: youtubeUrl,
-        script_input: scriptInput,
-        voice,
-      });
+      // Create job with file upload
+      const response = await createJob(
+        {
+          video: videoFile,
+          script_input: scriptInput,
+          voice,
+        },
+        (progress) => setUploadProgress(progress)
+      );
 
       // Navigate to job status page
       router.push(`/job/${response.job_id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create job");
       setIsLoading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -87,7 +155,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <div className="text-center space-y-4">
         <h1 className="text-4xl font-bold tracking-tight">
-          Create YouTube Shorts in Minutes
+          Create Shorts in Minutes
         </h1>
         <p className="text-lg text-muted-foreground">
           Transform long-form videos into engaging 45-75 second shorts with AI voiceover
@@ -118,23 +186,73 @@ export default function HomePage() {
         <CardHeader>
           <CardTitle>Generate Short</CardTitle>
           <CardDescription>
-            Enter your YouTube video URL and the script you created with Gemini
+            Upload your video and add the script you created with Gemini
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* YouTube URL */}
+            {/* Video Upload */}
             <div className="space-y-2">
               <label className="text-sm font-medium leading-none">
-                YouTube URL
+                Source Video
               </label>
-              <Input
-                type="url"
-                value={youtubeUrl}
-                onChange={(e) => setYoutubeUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                required
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                onChange={handleFileSelect}
+                className="hidden"
               />
+              
+              {!videoFile ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-gray-50 transition-colors"
+                >
+                  <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+                  <p className="text-sm font-medium text-gray-700">
+                    Click to upload or drag and drop
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    MP4, MOV up to {MAX_FILE_SIZE_MB}MB
+                  </p>
+                </div>
+              ) : (
+                <div className="border rounded-lg p-4 bg-gray-50">
+                  <div className="flex items-center gap-3">
+                    <FileVideo className="w-8 h-8 text-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{videoFile.name}</p>
+                      <p className="text-xs text-gray-500">{formatFileSize(videoFile.size)}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearFile}
+                      className="p-1 hover:bg-gray-200 rounded"
+                      disabled={isLoading}
+                    >
+                      <X className="w-4 h-4 text-gray-500" />
+                    </button>
+                  </div>
+                  
+                  {/* Upload progress */}
+                  {isLoading && uploadProgress > 0 && (
+                    <div className="mt-3">
+                      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Uploading... {uploadProgress}%
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Script Input */}

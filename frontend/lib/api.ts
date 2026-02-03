@@ -20,7 +20,7 @@ export interface JobPreview {
 }
 
 export interface CreateJobRequest {
-  youtube_url: string;
+  video: File;
   script_input: string;
   voice: string;
 }
@@ -29,6 +29,8 @@ export interface CreateJobResponse {
   job_id: string;
   status: string;
 }
+
+export type UploadProgressCallback = (progress: number) => void;
 
 // Fetch available voices
 export async function getVoices(): Promise<Voice[]> {
@@ -40,22 +42,56 @@ export async function getVoices(): Promise<Voice[]> {
   return data.voices;
 }
 
-// Create a new job
-export async function createJob(request: CreateJobRequest): Promise<CreateJobResponse> {
-  const response = await fetch(`${API_URL}/jobs`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(request),
+// Create a new job with file upload
+export async function createJob(
+  request: CreateJobRequest,
+  onProgress?: UploadProgressCallback
+): Promise<CreateJobResponse> {
+  const formData = new FormData();
+  formData.append("video", request.video);
+  formData.append("script_input", request.script_input);
+  formData.append("voice", request.voice);
+
+  // Use XMLHttpRequest for upload progress tracking
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable && onProgress) {
+        const progress = Math.round((event.loaded / event.total) * 100);
+        onProgress(progress);
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          resolve(response);
+        } catch {
+          reject(new Error("Invalid response from server"));
+        }
+      } else {
+        try {
+          const error = JSON.parse(xhr.responseText);
+          reject(new Error(error.detail || "Failed to create job"));
+        } catch {
+          reject(new Error(`Upload failed with status ${xhr.status}`));
+        }
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error("Network error during upload"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      reject(new Error("Upload cancelled"));
+    });
+
+    xhr.open("POST", `${API_URL}/jobs`);
+    xhr.send(formData);
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to create job");
-  }
-
-  return response.json();
 }
 
 // Get job status

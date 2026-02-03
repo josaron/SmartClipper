@@ -7,7 +7,7 @@ import uuid
 
 class JobStatus(str, Enum):
     PENDING = "pending"
-    DOWNLOADING = "downloading"
+    UPLOADING = "uploading"
     GENERATING_AUDIO = "generating_audio"
     PROCESSING_VIDEO = "processing_video"
     FINALIZING = "finalizing"
@@ -27,9 +27,8 @@ class ScriptSegment(BaseModel):
     clip_path: Optional[str] = None
 
 
-class JobCreate(BaseModel):
-    """Request body for creating a new job."""
-    youtube_url: str = Field(..., description="YouTube video URL")
+class JobCreateForm(BaseModel):
+    """Form data for creating a new job (used with file upload)."""
     script_input: str = Field(..., description="Pipe-delimited script input")
     voice: str = Field(default="en_US-lessac-medium", description="Piper voice model name")
 
@@ -52,7 +51,7 @@ class JobPreview(BaseModel):
 class Job(BaseModel):
     """Complete job data."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    youtube_url: str
+    source_video_path: str = Field(..., description="Path to the uploaded source video")
     voice: str
     segments: List[ScriptSegment] = Field(default_factory=list)
     status: JobStatus = JobStatus.PENDING
