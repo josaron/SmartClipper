@@ -33,6 +33,7 @@ app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 
 
 @app.get("/health")
+@app.get("/heath")  # Handle typo in Render config
 async def health_check():
     """Health check endpoint for Render."""
     return {"status": "healthy"}
