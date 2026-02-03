@@ -13,10 +13,11 @@ app = FastAPI(
 
 # CORS configuration
 cors_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000")
-cors_origins = [origin.strip() for origin in cors_origins_raw.split(",")]
+# Strip whitespace and trailing slashes from origins (common config mistakes)
+cors_origins = [origin.strip().rstrip("/") for origin in cors_origins_raw.split(",")]
 # #region agent log
 print(f"[DEBUG] CORS_ORIGINS env var: '{cors_origins_raw}'")
-print(f"[DEBUG] Parsed CORS origins: {cors_origins}")
+print(f"[DEBUG] Parsed CORS origins (normalized): {cors_origins}")
 # #endregion
 app.add_middleware(
     CORSMiddleware,
