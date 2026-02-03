@@ -1,10 +1,22 @@
 import os
+import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+# Startup logging
+print("=" * 50, file=sys.stderr)
+print("SmartClipper API Starting...", file=sys.stderr)
+print(f"Python version: {sys.version}", file=sys.stderr)
+
 from app.routers import jobs
 from app.config import TEMP_DIR, OUTPUT_DIR
+
+print(f"TEMP_DIR: {TEMP_DIR}", file=sys.stderr)
+print(f"OUTPUT_DIR: {OUTPUT_DIR}", file=sys.stderr)
+print(f"TEMP_DIR exists: {os.path.exists(TEMP_DIR)}", file=sys.stderr)
+print(f"OUTPUT_DIR exists: {os.path.exists(OUTPUT_DIR)}", file=sys.stderr)
+print("=" * 50, file=sys.stderr)
 
 app = FastAPI(
     title="SmartClipper API",

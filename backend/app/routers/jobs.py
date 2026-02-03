@@ -148,6 +148,10 @@ async def create_job(
     The job will be processed in the background. Use the returned job ID
     to poll for status updates.
     """
+    import sys
+    print(f"[create_job] Received upload: filename={video.filename}, content_type={video.content_type}, voice={voice}", file=sys.stderr)
+    print(f"[create_job] Script input length: {len(script_input)} chars", file=sys.stderr)
+    
     # Validate file type
     if not video.content_type or not video.content_type.startswith("video/"):
         raise HTTPException(status_code=400, detail="File must be a video (MP4, MOV, etc.)")
