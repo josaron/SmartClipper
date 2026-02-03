@@ -85,8 +85,17 @@ class YouTubeDownloader:
         _debug_log("downloader.py:download:normalized", "URL normalization", {"original": url, "normalized": normalized_url, "video_id": video_id}, "H")
         # #endregion
 
+        # Check for YouTube cookies (optional - helps bypass bot detection on cloud IPs)
+        cookies_file = None
+        youtube_cookies = os.getenv("YOUTUBE_COOKIES")
+        if youtube_cookies:
+            cookies_file = os.path.join(self.output_dir, "cookies.txt")
+            with open(cookies_file, "w") as f:
+                f.write(youtube_cookies)
+
         # yt-dlp command to download at 720p max
-        # Using android player client to bypass some 403 errors
+        # Try multiple player clients to bypass YouTube bot detection on cloud IPs
+        # Order: mweb (mobile web), ios, android - these often work better from datacenter IPs
         cmd = [
             "yt-dlp",
             "-f", "bestvideo[height<=720]+bestaudio/best[height<=720]",
@@ -94,14 +103,22 @@ class YouTubeDownloader:
             "-o", output_path,
             "--no-playlist",
             "--no-warnings",
-            "--extractor-args", "youtube:player_client=android",
-            "--retries", "3",
+            "--extractor-args", "youtube:player_client=mweb,ios,android",
+            "--extractor-args", "youtube:player_skip=webpage",
+            "--retries", "5",
             "--force-ipv4",
-            normalized_url
+            "--sleep-requests", "1",
+            "--geo-bypass",
         ]
+        
+        # Add cookies if available
+        if cookies_file:
+            cmd.extend(["--cookies", cookies_file])
+        
+        cmd.append(normalized_url)
 
         # #region agent log
-        _debug_log("downloader.py:download:cmd", "yt-dlp command with android client", {"cmd": cmd}, "F,G")
+        _debug_log("downloader.py:download:cmd", "yt-dlp command", {"cmd": cmd, "has_cookies": cookies_file is not None}, "F,G,K,L")
         # #endregion
         
         try:
