@@ -6,4 +6,4 @@ services:
     healthCheckPath: /health
     envVars:
       - key: CORS_ORIGINS
-        value: https://smartclipper.vercel.app
+        value: https://smart-clipper.vercel.app
