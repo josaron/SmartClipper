@@ -31,6 +31,11 @@ COPY app/ ./app/
 # Create directories for temp files
 RUN mkdir -p /app/temp /app/output
 
+# Set environment variables for Docker paths
+ENV TEMP_DIR=/app/temp
+ENV OUTPUT_DIR=/app/output
+ENV VOICES_DIR=/app/voices
+
 # Expose port
 EXPOSE 8000
 

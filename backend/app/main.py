@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import jobs
+from app.config import TEMP_DIR, OUTPUT_DIR
 
 app = FastAPI(
     title="SmartClipper API",
@@ -23,12 +24,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create temp and output directories
-os.makedirs("/app/temp", exist_ok=True)
-os.makedirs("/app/output", exist_ok=True)
-
 # Mount static files for serving outputs
-app.mount("/static", StaticFiles(directory="/app/output"), name="static")
+app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
 
 # Include routers
 app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])

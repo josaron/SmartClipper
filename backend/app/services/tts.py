@@ -3,17 +3,19 @@ import subprocess
 import wave
 from typing import List, Tuple
 
+from app.config import VOICES_DIR
+
 
 class PiperTTS:
     """Service for generating TTS audio using Piper."""
     
     VOICE_MODELS = {
-        "en_US-lessac-medium": "/app/voices/en_US-lessac-medium.onnx",
-        "en_US-amy-medium": "/app/voices/en_US-amy-medium.onnx",
-        "en_GB-alan-medium": "/app/voices/en_GB-alan-medium.onnx",
+        "en_US-lessac-medium": os.path.join(VOICES_DIR, "en_US-lessac-medium.onnx"),
+        "en_US-amy-medium": os.path.join(VOICES_DIR, "en_US-amy-medium.onnx"),
+        "en_GB-alan-medium": os.path.join(VOICES_DIR, "en_GB-alan-medium.onnx"),
     }
     
-    def __init__(self, output_dir: str = "/app/temp"):
+    def __init__(self, output_dir: str):
         self.output_dir = output_dir
     
     def generate_audio(self, text: str, voice: str, output_path: str) -> float:

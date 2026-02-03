@@ -12,7 +12,7 @@ class VideoProcessor:
     OUTPUT_HEIGHT = 1280
     CLIP_DURATION = 15  # Max seconds to extract per clip
     
-    def __init__(self, temp_dir: str = "/app/temp"):
+    def __init__(self, temp_dir: str):
         self.temp_dir = temp_dir
         self.subject_detector = SubjectDetector()
     

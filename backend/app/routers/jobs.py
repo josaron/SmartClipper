@@ -13,6 +13,7 @@ from app.utils.parser import parse_script_input
 from app.services.downloader import YouTubeDownloader
 from app.services.tts import PiperTTS
 from app.services.video import VideoProcessor
+from app.config import TEMP_DIR, OUTPUT_DIR
 
 router = APIRouter()
 
@@ -34,12 +35,12 @@ async def process_job(job_id: str):
         return
     
     try:
-        downloader = YouTubeDownloader()
-        tts = PiperTTS()
-        video_processor = VideoProcessor()
+        downloader = YouTubeDownloader(output_dir=TEMP_DIR)
+        tts = PiperTTS(output_dir=TEMP_DIR)
+        video_processor = VideoProcessor(temp_dir=TEMP_DIR)
         
-        job_dir = f"/app/temp/{job_id}"
-        output_dir = f"/app/output/{job_id}"
+        job_dir = os.path.join(TEMP_DIR, job_id)
+        output_dir = os.path.join(OUTPUT_DIR, job_id)
         os.makedirs(job_dir, exist_ok=True)
         os.makedirs(output_dir, exist_ok=True)
         
@@ -225,10 +226,10 @@ async def delete_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     
     # Clean up files
-    output_dir = f"/app/output/{job_id}"
-    temp_dir = f"/app/temp/{job_id}"
-    shutil.rmtree(output_dir, ignore_errors=True)
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    job_output_dir = os.path.join(OUTPUT_DIR, job_id)
+    job_temp_dir = os.path.join(TEMP_DIR, job_id)
+    shutil.rmtree(job_output_dir, ignore_errors=True)
+    shutil.rmtree(job_temp_dir, ignore_errors=True)
     
     del jobs[job_id]
     
