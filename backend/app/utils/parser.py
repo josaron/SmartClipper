@@ -32,16 +32,72 @@ def format_timestamp_for_ffmpeg(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+# #region agent log
+import json as _json
+_LOG_PATH = "/Users/josephaharon/Documents/workspace/SmartClipper/.cursor/debug.log"
+def _dbg(loc, msg, data, hyp):
+    try:
+        with open(_LOG_PATH, "a") as f:
+            f.write(_json.dumps({"location": loc, "message": msg, "data": data, "hypothesisId": hyp, "timestamp": __import__("time").time()}) + "\n")
+    except: pass
+# #endregion
+
+def _parse_alternative_format(line: str) -> tuple:
+    """
+    Parse alternative format: MM:SS Script text... [MM:SS] (Description)
+    
+    The bracketed timestamp [MM:SS] is the YouTube video timestamp.
+    The parenthesized text (Description) is the visual description.
+    The leading MM:SS is voiceover timing (ignored for now).
+    
+    Returns: (text, timestamp, description) or (None, None, None) if no match
+    """
+    # Pattern: optional leading timestamp, text, bracketed timestamp, optional description
+    # Example: 00:30   For 20 years, Murphy didn't leave...   [28:01] (Shot of the sealed cave entrance)
+    
+    # Look for bracketed timestamp [MM:SS] or [HH:MM:SS]
+    bracket_match = re.search(r'\[(\d{1,2}:\d{2}(?::\d{2})?)\]', line)
+    if not bracket_match:
+        return None, None, None
+    
+    timestamp = bracket_match.group(1)
+    
+    # Extract description from parentheses after the bracketed timestamp
+    desc_match = re.search(r'\[[\d:]+\]\s*\(([^)]+)\)', line)
+    description = desc_match.group(1).strip() if desc_match else ""
+    
+    # Extract text: everything before the bracketed timestamp, minus any leading timestamp
+    text_portion = line[:bracket_match.start()].strip()
+    
+    # Remove leading timestamp (e.g., "00:30   " at start)
+    text_portion = re.sub(r'^(\d{1,2}:\d{2}(?::\d{2})?)\s+', '', text_portion)
+    
+    # Clean up the text
+    text = text_portion.strip()
+    
+    if text and timestamp:
+        return text, timestamp, description
+    
+    return None, None, None
+
+
 def parse_script_input(script_input: str) -> List[ScriptSegment]:
     """
-    Parse pipe-delimited script input into ScriptSegment objects.
+    Parse script input into ScriptSegment objects.
     
-    Expected format (one per line):
-    Script text here|MM:SS|Description of footage
+    Supports two formats:
     
-    Also handles:
-    Script text here|[MM:SS]|Description of footage
+    1. Pipe-delimited (preferred):
+       Script text here|MM:SS|Description of footage
+       Script text here|[MM:SS]|Description of footage
+    
+    2. Alternative format (Gemini-style):
+       MM:SS   Script text here   [MM:SS] (Description of footage)
+       Where the bracketed [MM:SS] is the YouTube video timestamp.
     """
+    # #region agent log
+    _dbg("parser:entry", "parse_script_input called", {"input_len": len(script_input), "has_pipes": "|" in script_input, "preview": script_input[:100]}, "H1")
+    # #endregion
     segments = []
     lines = script_input.strip().split("\n")
     
@@ -50,27 +106,48 @@ def parse_script_input(script_input: str) -> List[ScriptSegment]:
         if not line:
             continue
         
+        # Try pipe-delimited format first
         parts = line.split("|")
-        if len(parts) < 2:
-            # Try to be lenient - maybe just text and timestamp
-            continue
+        if len(parts) >= 2:
+            text = parts[0].strip()
+            timestamp_raw = parts[1].strip()
+            description = parts[2].strip() if len(parts) > 2 else ""
+            
+            # Extract timestamp from formats like "[23:23]" or "23:23"
+            timestamp_match = re.search(r'\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?', timestamp_raw)
+            if timestamp_match:
+                timestamp = timestamp_match.group(1)
+            else:
+                timestamp = timestamp_raw
+            
+            if text and timestamp:
+                # #region agent log
+                _dbg("parser:pipe", "Parsed via pipe format", {"text": text[:40], "timestamp": timestamp, "desc": description[:30] if description else ""}, "H1")
+                # #endregion
+                segments.append(ScriptSegment(
+                    text=text,
+                    timestamp=timestamp,
+                    description=description
+                ))
+                continue
         
-        text = parts[0].strip()
-        timestamp_raw = parts[1].strip()
-        description = parts[2].strip() if len(parts) > 2 else ""
-        
-        # Extract timestamp from formats like "[23:23]" or "23:23"
-        timestamp_match = re.search(r'\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?', timestamp_raw)
-        if timestamp_match:
-            timestamp = timestamp_match.group(1)
-        else:
-            timestamp = timestamp_raw
-        
+        # Try alternative format: MM:SS Text... [MM:SS] (Description)
+        text, timestamp, description = _parse_alternative_format(line)
         if text and timestamp:
+            # #region agent log
+            _dbg("parser:alt", "Parsed via alternative format", {"text": text[:40], "timestamp": timestamp, "desc": description[:30] if description else ""}, "H2")
+            # #endregion
             segments.append(ScriptSegment(
                 text=text,
                 timestamp=timestamp,
                 description=description
             ))
+        else:
+            # #region agent log
+            _dbg("parser:skip", "Could not parse line", {"line": line[:60]}, "H3")
+            # #endregion
     
+    # #region agent log
+    _dbg("parser:result", "Final result", {"num_segments": len(segments)}, "H1")
+    # #endregion
     return segments
