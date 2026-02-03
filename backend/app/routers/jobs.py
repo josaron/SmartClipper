@@ -128,6 +128,9 @@ async def process_job(job_id: str):
 @router.get("/voices")
 async def get_voices():
     """Get available TTS voices."""
+    # #region agent log
+    print(f"[DEBUG] /jobs/voices called, returning {len(AVAILABLE_VOICES)} voices")
+    # #endregion
     return {"voices": AVAILABLE_VOICES}
 
 
