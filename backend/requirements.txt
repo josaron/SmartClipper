@@ -4,7 +4,7 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
 # Video/Audio processing
-yt-dlp==2024.1.26
+yt-dlp>=2024.1.1
 piper-tts==1.2.0
 
 # MediaPipe for subject detection
