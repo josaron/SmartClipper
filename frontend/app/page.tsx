@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScriptInput } from "@/components/ScriptInput";
 import { VoiceSelector } from "@/components/VoiceSelector";
 import { createJob, getVoices, type Voice } from "@/lib/api";
+import { parseScriptInput } from "@/lib/parser";
 import { Loader2, Video, Sparkles, Clock } from "lucide-react";
 
 export default function HomePage() {
@@ -18,6 +19,15 @@ export default function HomePage() {
   const [voices, setVoices] = useState<Voice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Validate script input in real-time
+  const parseResult = useMemo(() => {
+    if (!scriptInput.trim()) return null;
+    return parseScriptInput(scriptInput);
+  }, [scriptInput]);
+
+  const hasValidSegments = (parseResult?.segments.length ?? 0) > 0;
+  const canSubmit = youtubeUrl.trim() && hasValidSegments && !isLoading;
 
   // Fetch available voices on mount
   useEffect(() => {
@@ -52,6 +62,9 @@ export default function HomePage() {
       }
       if (!scriptInput.trim()) {
         throw new Error("Please enter the script with timestamps");
+      }
+      if (!hasValidSegments) {
+        throw new Error("No valid script segments found. Check the format.");
       }
 
       // Create job
@@ -147,7 +160,7 @@ export default function HomePage() {
               type="submit"
               className="w-full"
               size="lg"
-              disabled={isLoading}
+              disabled={!canSubmit}
             >
               {isLoading ? (
                 <>

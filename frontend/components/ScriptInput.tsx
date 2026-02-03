@@ -1,6 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { Textarea } from "@/components/ui/textarea";
+import { parseScriptInput, estimateDuration } from "@/lib/parser";
+import { CheckCircle2, AlertCircle, Clock } from "lucide-react";
 
 interface ScriptInputProps {
   value: string;
@@ -16,6 +19,21 @@ In 2024, his lair was finally sealed for good. Most think he was scrapped, but s
 ...waiting for the day the magic returns to Vegas. Subscribe for more lost history!|31:01|Wide shot of the Excalibur towers`;
 
 export function ScriptInput({ value, onChange }: ScriptInputProps) {
+  // Parse and validate in real-time
+  const parseResult = useMemo(() => {
+    if (!value.trim()) return null;
+    return parseScriptInput(value);
+  }, [value]);
+
+  const segmentCount = parseResult?.segments.length ?? 0;
+  const invalidCount = parseResult?.invalidLines.length ?? 0;
+  const estimatedSeconds = parseResult ? estimateDuration(parseResult.segments) : 0;
+
+  // Determine validation state
+  const hasInput = value.trim().length > 0;
+  const isValid = hasInput && segmentCount > 0;
+  const hasWarnings = invalidCount > 0;
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -37,11 +55,60 @@ export function ScriptInput({ value, onChange }: ScriptInputProps) {
 
 Script text here|MM:SS|Description of footage
 Another line of script|MM:SS|Another description"
-        className="min-h-[200px] font-mono text-sm"
+        className={`min-h-[200px] font-mono text-sm ${
+          hasInput && !isValid ? "border-destructive focus-visible:ring-destructive" : ""
+        }`}
       />
-      <p className="text-xs text-muted-foreground">
-        Format: <code className="bg-muted px-1 rounded">Script text|Timestamp|Description</code> (one segment per line)
-      </p>
+
+      {/* Validation feedback */}
+      <div className="flex items-center justify-between text-xs">
+        <p className="text-muted-foreground">
+          Format: <code className="bg-muted px-1 rounded">Script text|Timestamp|Description</code> (one segment per line)
+        </p>
+
+        {/* Status indicator */}
+        {hasInput && (
+          <div className="flex items-center gap-3">
+            {isValid ? (
+              <>
+                <span className="flex items-center gap-1 text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {segmentCount} segment{segmentCount !== 1 ? "s" : ""}
+                </span>
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="w-3.5 h-3.5" />
+                  ~{estimatedSeconds}s
+                </span>
+              </>
+            ) : (
+              <span className="flex items-center gap-1 text-destructive">
+                <AlertCircle className="w-3.5 h-3.5" />
+                No valid segments
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Warning for partially invalid input */}
+      {hasWarnings && segmentCount > 0 && (
+        <p className="text-xs text-amber-600 flex items-center gap-1">
+          <AlertCircle className="w-3.5 h-3.5" />
+          {invalidCount} line{invalidCount !== 1 ? "s" : ""} couldn&apos;t be parsed and will be skipped
+        </p>
+      )}
+
+      {/* Help text when no valid segments */}
+      {hasInput && !isValid && (
+        <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+          <p className="font-medium mb-1">No valid script segments found</p>
+          <p className="text-xs">
+            Each line should follow the format: <code>Script text|MM:SS|Description</code>
+            <br />
+            Or: <code>MM:SS Script text [MM:SS] (Description)</code>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

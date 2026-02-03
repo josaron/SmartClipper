@@ -32,16 +32,6 @@ def format_timestamp_for_ffmpeg(seconds: int) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
-# #region agent log
-import json as _json
-_LOG_PATH = "/Users/josephaharon/Documents/workspace/SmartClipper/.cursor/debug.log"
-def _dbg(loc, msg, data, hyp):
-    try:
-        with open(_LOG_PATH, "a") as f:
-            f.write(_json.dumps({"location": loc, "message": msg, "data": data, "hypothesisId": hyp, "timestamp": __import__("time").time()}) + "\n")
-    except: pass
-# #endregion
-
 def _parse_alternative_format(line: str) -> tuple:
     """
     Parse alternative format: MM:SS Script text... [MM:SS] (Description)
@@ -95,9 +85,6 @@ def parse_script_input(script_input: str) -> List[ScriptSegment]:
        MM:SS   Script text here   [MM:SS] (Description of footage)
        Where the bracketed [MM:SS] is the YouTube video timestamp.
     """
-    # #region agent log
-    _dbg("parser:entry", "parse_script_input called", {"input_len": len(script_input), "has_pipes": "|" in script_input, "preview": script_input[:100]}, "H1")
-    # #endregion
     segments = []
     lines = script_input.strip().split("\n")
     
@@ -121,9 +108,6 @@ def parse_script_input(script_input: str) -> List[ScriptSegment]:
                 timestamp = timestamp_raw
             
             if text and timestamp:
-                # #region agent log
-                _dbg("parser:pipe", "Parsed via pipe format", {"text": text[:40], "timestamp": timestamp, "desc": description[:30] if description else ""}, "H1")
-                # #endregion
                 segments.append(ScriptSegment(
                     text=text,
                     timestamp=timestamp,
@@ -134,20 +118,10 @@ def parse_script_input(script_input: str) -> List[ScriptSegment]:
         # Try alternative format: MM:SS Text... [MM:SS] (Description)
         text, timestamp, description = _parse_alternative_format(line)
         if text and timestamp:
-            # #region agent log
-            _dbg("parser:alt", "Parsed via alternative format", {"text": text[:40], "timestamp": timestamp, "desc": description[:30] if description else ""}, "H2")
-            # #endregion
             segments.append(ScriptSegment(
                 text=text,
                 timestamp=timestamp,
                 description=description
             ))
-        else:
-            # #region agent log
-            _dbg("parser:skip", "Could not parse line", {"line": line[:60]}, "H3")
-            # #endregion
     
-    # #region agent log
-    _dbg("parser:result", "Final result", {"num_segments": len(segments)}, "H1")
-    # #endregion
     return segments
