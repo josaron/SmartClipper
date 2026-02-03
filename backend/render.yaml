@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: smartclipper-api
+    env: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        value: https://smartclipper.vercel.app
